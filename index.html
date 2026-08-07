@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virgin DSU Screener</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #222221;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid-line: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+    --blue: #3987e5;
+    --aqua: #199e70;
+    --warn: #fab219;
+    --crit: #d03b3b;
+    --good: #0ca30c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--page); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 13.5px; line-height: 1.45;
+  }
+  header {
+    padding: 14px 22px 10px; display: flex; align-items: baseline; gap: 14px;
+    flex-wrap: wrap; border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 19px; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  header .sub b { color: var(--ink-2); font-weight: 600; }
+
+  .banner {
+    margin: 14px 22px 0; padding: 11px 16px; border-radius: 8px;
+    display: flex; align-items: center; gap: 12px; font-size: 13.5px;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .banner.warn { border-color: rgba(250,178,25,.45); background: rgba(250,178,25,.08); }
+  .banner.warn .ico { color: var(--warn); }
+  .banner .ico { font-size: 16px; }
+  .banner b { font-weight: 650; }
+  .banner button {
+    margin-left: auto; background: none; border: 1px solid var(--border);
+    color: var(--ink); padding: 5px 12px; border-radius: 6px; cursor: pointer;
+    font: inherit; font-size: 12.5px;
+  }
+  .banner button:hover { background: var(--surface-2); }
+
+  .tiles { display: flex; gap: 12px; padding: 14px 22px 0; flex-wrap: wrap; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 16px 9px; min-width: 128px;
+  }
+  .tile .lab { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  .tile .val { font-size: 24px; font-weight: 650; margin-top: 1px; }
+  .tile .note { color: var(--ink-2); font-size: 11.5px; }
+  .tile.newt .val { color: var(--warn); }
+
+  .controls {
+    display: flex; gap: 10px; align-items: center; padding: 14px 22px 10px; flex-wrap: wrap;
+  }
+  .controls input[type=text], .controls select {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font: inherit; font-size: 13px;
+  }
+  .controls input[type=text] { width: 230px; }
+  .controls label.chk { display: flex; gap: 6px; align-items: center; color: var(--ink-2); cursor: pointer; }
+  .controls .count { color: var(--muted); font-size: 12.5px; margin-left: 2px; }
+  .controls .spacer { flex: 1; }
+  .controls button {
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+    padding: 6px 13px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12.5px;
+  }
+  .controls button:hover { background: var(--surface-2); }
+
+  #map { height: 54vh; min-height: 380px; margin: 0 22px; border-radius: 10px; border: 1px solid var(--border); background: #000; }
+  .legend {
+    background: rgba(26,26,25,.92); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; color: var(--ink-2); font-size: 12px; line-height: 1.9;
+  }
+  .legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: baseline; }
+
+  .leaflet-popup-content-wrapper {
+    background: var(--surface); color: var(--ink); border-radius: 10px;
+    border: 1px solid var(--border); box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  }
+  .leaflet-popup-tip { background: var(--surface); }
+  .leaflet-popup-content { margin: 14px 16px; font: 12.5px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .pp h3 { font-size: 14.5px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+  .pp .loc { color: var(--ink-2); margin-bottom: 8px; }
+  .pp table { border-collapse: collapse; width: 100%; margin: 4px 0 2px; }
+  .pp td { padding: 1.5px 0; vertical-align: top; }
+  .pp td:first-child { color: var(--muted); padding-right: 12px; white-space: nowrap; }
+  .pp .permits { margin-top: 8px; border-top: 1px solid var(--grid-line); padding-top: 7px; }
+  .pp .permits .p { margin-bottom: 6px; }
+  .pp .permits .p b { font-weight: 600; }
+  .pp .permits .p .d { color: var(--ink-2); font-size: 12px; }
+  .pp .approx { color: var(--muted); font-size: 11.5px; margin-top: 7px; font-style: italic; }
+
+  .badge {
+    display: inline-block; background: rgba(250,178,25,.15); color: var(--warn);
+    border: 1px solid rgba(250,178,25,.5); font-size: 10px; font-weight: 700;
+    letter-spacing: .8px; border-radius: 4px; padding: 1px 6px; vertical-align: middle;
+  }
+
+  .gridwrap { margin: 16px 22px 8px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table.grid { border-collapse: collapse; width: 100%; min-width: 1080px; font-size: 12.5px; }
+  table.grid th {
+    text-align: left; padding: 8px 10px; background: var(--surface-2); color: var(--ink-2);
+    font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0;
+  }
+  table.grid th .arr { color: var(--warn); }
+  table.grid td { padding: 7px 10px; border-top: 1px solid var(--grid-line); white-space: nowrap; }
+  table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid th.num { text-align: right; }
+  table.grid tbody tr { cursor: pointer; }
+  table.grid tbody tr:hover { background: var(--surface-2); }
+  table.grid td .sub { color: var(--muted); font-size: 11.5px; }
+  .footer { padding: 10px 22px 26px; color: var(--muted); font-size: 12px; }
+  .footer table { border-collapse: collapse; margin-top: 6px; }
+  .footer td, .footer th { padding: 2px 14px 2px 0; text-align: left; font-weight: 400; }
+  .footer th { color: var(--ink-2); font-weight: 600; }
+  .footer td.num, .footer th.num { text-align: right; padding-right: 22px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Virgin DSU Screener</h1>
+  <span class="sub">U.S. horizontal permits (last <b id="hWindow"></b> days) in units with <b>no existing production</b> &mdash; mineral owners never paid, first check coming</span>
+  <span class="sub" style="margin-left:auto">Updated <b id="hGen"></b></span>
+</header>
+
+<div class="banner" id="banner" hidden>
+  <span class="ico" id="bIco"></span>
+  <span id="bMsg"></span>
+  <button id="bBtn" hidden>Show new only</button>
+</div>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="controls">
+  <input type="text" id="fSearch" placeholder="Search operator, lease, county, formation&hellip;">
+  <select id="fState"><option value="">All states</option></select>
+  <select id="fOp"><option value="">All operators</option></select>
+  <label class="chk"><input type="checkbox" id="fNew"> New this week only</label>
+  <span class="count" id="fCount"></span>
+  <span class="spacer"></span>
+  <button id="btnCsv">Export CSV</button>
+  <button id="btnSat">Satellite</button>
+</div>
+
+<div id="map"></div>
+
+<div class="gridwrap">
+  <table class="grid">
+    <thead><tr id="gHead"></tr></thead>
+    <tbody id="gBody"></tbody>
+  </table>
+</div>
+
+<div class="footer" id="footer"></div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  var D = window.VIRGIN_DATA;
+  if (!D) { document.body.innerHTML = '<p style="padding:40px">data.js missing &mdash; run fetch.py first.</p>'; return; }
+  var M = D.meta, UNITS = D.units;
+
+  document.getElementById('hWindow').textContent = M.windowDays;
+  document.getElementById('hGen').textContent = M.generated.replace('T', ' ');
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function fmt(n) { return n == null ? '' : Number(n).toLocaleString('en-US'); }
+  var prevRun = M.runs && M.runs.length > 1 ? M.runs[M.runs.length - 2].date : null;
+
+  // ---------- alert banner ----------
+  var banner = document.getElementById('banner');
+  var bIco = document.getElementById('bIco'), bMsg = document.getElementById('bMsg'), bBtn = document.getElementById('bBtn');
+  banner.hidden = false;
+  if (M.firstRun) {
+    bIco.textContent = '●';
+    bMsg.innerHTML = 'Baseline established: <b>' + fmt(M.virginUnits) + ' virgin units</b> (' + fmt(M.virginPermits) + ' permits). Weekly new-activity alerts start with the next refresh.';
+  } else if (M.newPermits > 0) {
+    banner.className = 'banner warn';
+    bIco.textContent = '▲';
+    bMsg.innerHTML = '<b>New activity:</b> ' + fmt(M.newPermits) + ' new virgin-DSU permit' + (M.newPermits === 1 ? '' : 's') +
+      ' in ' + fmt(M.newUnits) + ' new unit' + (M.newUnits === 1 ? '' : 's') +
+      (prevRun ? ' since ' + prevRun : '') + '.';
+    bBtn.hidden = false;
+  } else {
+    bIco.textContent = '●';
+    bMsg.innerHTML = 'No new virgin-DSU permits since last refresh' + (prevRun ? ' (' + prevRun + ')' : '') + '.';
+  }
+
+  // ---------- KPI tiles ----------
+  var opsAll = {};
+  UNITS.forEach(function (u) { u.ops.forEach(function (o) { opsAll[o] = (opsAll[o] || 0) + 1; }); });
+  var tiles = [
+    { lab: 'Virgin units', val: fmt(M.virginUnits) },
+    { lab: 'Permits', val: fmt(M.virginPermits) },
+    { lab: 'New this week', val: fmt(M.newPermits), note: M.firstRun ? 'baseline run' : fmt(M.newUnits) + ' new units', cls: M.newPermits > 0 && !M.firstRun ? 'newt' : '' },
+    { lab: 'States', val: fmt(new Set(UNITS.map(function (u) { return u.state; })).size) },
+    { lab: 'Operators', val: fmt(Object.keys(opsAll).length) }
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(function (t) {
+    return '<div class="tile ' + (t.cls || '') + '"><div class="lab">' + t.lab + '</div><div class="val">' + t.val + '</div>' +
+      (t.note ? '<div class="note">' + t.note + '</div>' : '') + '</div>';
+  }).join('');
+
+  // ---------- filters ----------
+  var selState = document.getElementById('fState');
+  Array.from(new Set(UNITS.map(function (u) { return u.state; }))).sort().forEach(function (s) {
+    var o = document.createElement('option'); o.value = s; o.textContent = s; selState.appendChild(o);
+  });
+  var selOp = document.getElementById('fOp');
+  Object.keys(opsAll).sort(function (a, b) { return opsAll[b] - opsAll[a]; }).slice(0, 60).forEach(function (op) {
+    var o = document.createElement('option'); o.value = op; o.textContent = op + ' (' + opsAll[op] + ')'; selOp.appendChild(o);
+  });
+
+  var F = { q: '', state: '', op: '', newOnly: false };
+  function filtered() {
+    return UNITS.filter(function (u) {
+      if (F.state && u.state !== F.state) return false;
+      if (F.op && u.ops.indexOf(F.op) < 0) return false;
+      if (F.newOnly && !u.hasNew) return false;
+      if (F.q) {
+        var hay = (u.name + ' ' + u.county + ' ' + u.basin + ' ' + u.play + ' ' + u.str + ' ' + u.ops.join(' ') + ' ' +
+          u.permits.map(function (p) { return p.name + ' ' + p.api + ' ' + p.formation; }).join(' ')).toUpperCase();
+        if (hay.indexOf(F.q) < 0) return false;
+      }
+      return true;
+    });
+  }
+
+  // ---------- map ----------
+  var map = L.map('map', { zoomSnap: 0.5 });
+  var dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+  }).addTo(map);
+  var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri', maxZoom: 19
+  });
+  var satOn = false;
+  document.getElementById('btnSat').addEventListener('click', function () {
+    satOn = !satOn;
+    if (satOn) { map.removeLayer(dark); sat.addTo(map); this.textContent = 'Dark map'; }
+    else { map.removeLayer(sat); dark.addTo(map); this.textContent = 'Satellite'; }
+  });
+
+  var legend = L.control({ position: 'bottomleft' });
+  legend.onAdd = function () {
+    var d = L.DomUtil.create('div', 'legend');
+    d.innerHTML = '<span class="sw" style="background:#fab219"></span>New this week<br>' +
+      '<span class="sw" style="background:#199e70"></span>Virgin unit (no production ever)';
+    return d;
+  };
+  legend.addTo(map);
+
+  var layerGroup = L.layerGroup().addTo(map);
+  var unitLayers = {};
+
+  function popupHtml(u) {
+    var h = '<div class="pp"><h3>' + esc(u.name) + (u.hasNew ? ' <span class="badge">NEW</span>' : '') + '</h3>';
+    h += '<div class="loc">' + esc(u.county) + ' Co., ' + esc(u.state) +
+      (u.basin ? ' &middot; ' + esc(u.basin) : '') + (u.play ? ' &middot; ' + esc(u.play) : '') + '</div>';
+    h += '<table>';
+    if (u.str) h += '<tr><td>Location</td><td>' + esc(u.str) + '</td></tr>';
+    h += '<tr><td>Operator</td><td>' + esc(u.ops.join(', ')) + '</td></tr>';
+    if (u.interval) h += '<tr><td>Interval</td><td>' + esc(u.interval) + '</td></tr>';
+    h += '<tr><td>Est. unit</td><td>~' + fmt(u.estAcres) + ' ac &middot; max lateral ' + fmt(u.maxLatFt) + ' ft</td></tr>';
+    h += '<tr><td>Nearest producer</td><td>' + (u.nearestProd ?
+      esc(u.nearestProd.name) + ' (' + esc(u.nearestProd.op) + ') &mdash; <b>' + u.nearestProd.distMi + ' mi</b>' :
+      '<b>&gt;15 mi</b> &mdash; true wildcat area') + '</td></tr>';
+    if (u.activity && u.activity.length) {
+      h += '<tr><td>In-unit activity</td><td>' + u.activity.map(function (a) {
+        return esc(a.name) + ' &mdash; ' + esc(a.status) + (a.spud ? ' (spud ' + a.spud + ')' : '');
+      }).join('<br>') + '</td></tr>';
+    }
+    h += '<tr><td>First seen</td><td>' + u.firstSeen + '</td></tr>';
+    h += '</table>';
+    h += '<div class="permits">' + u.permits.map(function (p) {
+      return '<div class="p"><b>' + esc(p.name) + '</b>' + (p.isNew ? ' <span class="badge">NEW</span>' : '') +
+        '<div class="d">API ' + esc(p.api) + ' &middot; approved ' + p.approved +
+        (p.latft ? ' &middot; ' + fmt(p.latft) + ' ft lateral' : '') +
+        (p.formation ? '<br>' + esc(p.formation) : '') + '</div></div>';
+    }).join('') + '</div>';
+    if (u.approxGeom) h += '<div class="approx">Unit outline approximated (no permitted lateral geometry reported)</div>';
+    h += '</div>';
+    return h;
+  }
+
+  function draw(list) {
+    layerGroup.clearLayers();
+    unitLayers = {};
+    list.forEach(function (u) {
+      var isNew = u.hasNew;
+      var color = isNew ? '#fab219' : '#199e70';
+      var poly = L.polygon(u.ring, {
+        color: color, weight: isNew ? 2 : 1.2, fillColor: color,
+        fillOpacity: isNew ? 0.30 : 0.18, opacity: 0.9
+      });
+      var mk = L.circleMarker(u.centroid, {
+        radius: isNew ? 5 : 3.5, color: color, weight: 1.5,
+        fillColor: color, fillOpacity: 0.85
+      });
+      var pop = { maxWidth: 360, autoPanPadding: [30, 30] };
+      poly.bindPopup(popupHtml(u), pop);
+      mk.bindPopup(popupHtml(u), pop);
+      poly.on('mouseover', function () { poly.setStyle({ fillOpacity: 0.45 }); });
+      poly.on('mouseout', function () { poly.setStyle({ fillOpacity: isNew ? 0.30 : 0.18 }); });
+      layerGroup.addLayer(poly);
+      layerGroup.addLayer(mk);
+      unitLayers[u.id] = poly;
+    });
+  }
+
+  // ---------- grid ----------
+  var COLS = [
+    { k: 'hasNew', lab: '', w: 1, fn: function (u) { return u.hasNew ? '<span class="badge">NEW</span>' : ''; } },
+    { k: 'latestApproved', lab: 'Approved', fn: function (u) { return u.latestApproved; } },
+    { k: 'ops', lab: 'Operator', fn: function (u) { return esc(u.ops.join(', ')); }, sort: function (u) { return u.ops.join(','); } },
+    { k: 'name', lab: 'Unit / Lease', fn: function (u) { return esc(u.name) + (u.permits.length > 1 ? ' <span class="sub">&times;' + u.permits.length + ' permits</span>' : ''); } },
+    { k: 'state', lab: 'St', fn: function (u) { return u.state; } },
+    { k: 'county', lab: 'County', fn: function (u) { return esc(u.county); } },
+    { k: 'basin', lab: 'Basin / Play', fn: function (u) { return esc(u.basin || u.play || ''); } },
+    { k: 'maxLatFt', lab: 'Lateral ft', num: true, fn: function (u) { return fmt(u.maxLatFt); }, sort: function (u) { return u.maxLatFt; } },
+    { k: 'estAcres', lab: 'Est ac', num: true, fn: function (u) { return fmt(u.estAcres); }, sort: function (u) { return u.estAcres; } },
+    { k: 'near', lab: 'Nearest prod (mi)', num: true, fn: function (u) { return u.nearestProd ? u.nearestProd.distMi : '&gt;15'; }, sort: function (u) { return u.nearestProd ? u.nearestProd.distMi : 99; } },
+    { k: 'act', lab: 'In-unit activity', fn: function (u) { return u.activity && u.activity.length ? esc(u.activity.map(function (a) { return a.status; }).join(', ')) : ''; }, sort: function (u) { return (u.activity || []).length; } },
+    { k: 'str', lab: 'Location', fn: function (u) { return esc(u.str); } },
+    { k: 'firstSeen', lab: 'First seen', fn: function (u) { return u.firstSeen; } }
+  ];
+  var sortK = 'latestApproved', sortDir = -1;
+  var gHead = document.getElementById('gHead'), gBody = document.getElementById('gBody');
+  gHead.innerHTML = COLS.map(function (c, i) {
+    return '<th data-i="' + i + '" class="' + (c.num ? 'num' : '') + '">' + c.lab + '<span class="arr"></span></th>';
+  }).join('');
+  gHead.addEventListener('click', function (e) {
+    var th = e.target.closest('th'); if (!th) return;
+    var c = COLS[+th.dataset.i];
+    if (sortK === c.k) sortDir = -sortDir; else { sortK = c.k; sortDir = c.num ? -1 : 1; }
+    render();
+  });
+
+  var current = [];
+  function render() {
+    current = filtered();
+    var col = COLS.find(function (c) { return c.k === sortK; }) || COLS[1];
+    var sf = col.sort || function (u) { return u[col.k]; };
+    current.sort(function (a, b) {
+      var x = sf(a), y = sf(b);
+      if (x == null) return 1; if (y == null) return -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+    });
+    gHead.querySelectorAll('th').forEach(function (th) {
+      th.querySelector('.arr').textContent = COLS[+th.dataset.i].k === sortK ? (sortDir < 0 ? ' ▾' : ' ▴') : '';
+    });
+    gBody.innerHTML = current.map(function (u, i) {
+      return '<tr data-i="' + i + '">' + COLS.map(function (c) {
+        return '<td class="' + (c.num ? 'num' : '') + '">' + c.fn(u) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    document.getElementById('fCount').textContent = fmt(current.length) + ' of ' + fmt(UNITS.length) + ' units';
+    draw(current);
+    if (current.length && current.length < UNITS.length) {
+      var b = L.latLngBounds(current.map(function (u) { return u.centroid; }));
+      map.fitBounds(b.pad(0.2));
+    }
+  }
+
+  gBody.addEventListener('click', function (e) {
+    var tr = e.target.closest('tr'); if (!tr) return;
+    var u = current[+tr.dataset.i];
+    map.fitBounds(L.latLngBounds(u.ring).pad(1.5));
+    var ly = unitLayers[u.id];
+    if (ly) setTimeout(function () { ly.openPopup(); }, 250);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.getElementById('fSearch').addEventListener('input', function () { F.q = this.value.trim().toUpperCase(); render(); });
+  selState.addEventListener('change', function () { F.state = this.value; render(); });
+  selOp.addEventListener('change', function () { F.op = this.value; render(); });
+  document.getElementById('fNew').addEventListener('change', function () { F.newOnly = this.checked; render(); });
+  bBtn.addEventListener('click', function () {
+    document.getElementById('fNew').checked = true; F.newOnly = true; render();
+  });
+
+  // ---------- CSV export ----------
+  document.getElementById('btnCsv').addEventListener('click', function () {
+    var head = ['New', 'FirstSeen', 'LatestApproved', 'Operators', 'Unit', 'State', 'County', 'Basin', 'Play', 'Location',
+      'Permits', 'PermitAPIs', 'MaxLateralFt', 'EstAcres', 'NearestProducerMi', 'NearestProducer', 'InUnitActivity'];
+    function cell(v) {
+      v = String(v == null ? '' : v);
+      return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }
+    var rows = current.map(function (u) {
+      return [u.hasNew ? 'NEW' : '', u.firstSeen, u.latestApproved, u.ops.join('; '), u.name, u.state, u.county,
+        u.basin, u.play, u.str,
+        u.permits.map(function (p) { return p.name; }).join('; '),
+        u.permits.map(function (p) { return p.api; }).join('; '),
+        u.maxLatFt, u.estAcres,
+        u.nearestProd ? u.nearestProd.distMi : '>15',
+        u.nearestProd ? u.nearestProd.name + ' (' + u.nearestProd.op + ')' : '',
+        (u.activity || []).map(function (a) { return a.name + ' ' + a.status; }).join('; ')
+      ].map(cell).join(',');
+    });
+    var csv = head.join(',') + '\n' + rows.join('\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'virgin_dsu_' + M.generated.slice(0, 10) + '.csv';
+    a.click();
+  });
+
+  // ---------- footer: run history ----------
+  var runs = (M.runs || []).slice().reverse();
+  document.getElementById('footer').innerHTML =
+    'Screen: permit lateral + half-mile buffer each side; a unit is "virgin" when no wellbore inside it has ever recorded production (Enverus FirstProdDate / production history). ' +
+    'Unit outlines are corridor approximations, not surveyed unit boundaries. Data: Enverus Developer API v3.' +
+    (runs.length ? '<table><tr><th>Run</th><th class="num">Units</th><th class="num">Permits</th><th class="num">New permits</th><th class="num">New units</th></tr>' +
+      runs.map(function (r) {
+        return '<tr><td>' + r.date + '</td><td class="num">' + fmt(r.virginUnits) + '</td><td class="num">' + fmt(r.virginPermits) +
+          '</td><td class="num">' + fmt(r.newPermits) + '</td><td class="num">' + fmt(r.newUnits) + '</td></tr>';
+      }).join('') + '</table>' : '');
+
+  // initial render
+  render();
+  if (UNITS.length) {
+    map.fitBounds(L.latLngBounds(UNITS.map(function (u) { return u.centroid; })).pad(0.08));
+  } else {
+    map.setView([39, -98], 4);
+  }
+})();
+</script>
+</body>
+</html>

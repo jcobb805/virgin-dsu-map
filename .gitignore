@@ -1,0 +1,4 @@
+_cache/
+refresh.log
+__pycache__/
+*.pyc
