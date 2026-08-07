@@ -35,6 +35,8 @@ from datetime import date, datetime, timedelta
 
 from enverus_developer_api import DeveloperAPIv3
 
+import ownership
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(BASE, '_cache')
 os.makedirs(CACHE, exist_ok=True)
@@ -600,6 +602,9 @@ def main():
         })
     units.sort(key=lambda u: u['latestApproved'], reverse=True)
 
+    log('[4b] Mineral ownership tiers (BLM overlay + name markers)...')
+    ownership.enrich_units(units, log=log)
+
     new_units = sum(1 for u in units if u['isNew'])
     first_run = len(hist['runs']) == 0
     hist['runs'].append({
@@ -624,6 +629,8 @@ def main():
             'virginUnits': len(units),
             'newPermits': len(new_pids),
             'newUnits': new_units,
+            'tierCounts': {t: sum(1 for u in units if u['tier'] == t)
+                           for t in ('FEE', 'MIXED', 'GOV')},
             'states': sorted(cands_by_state),
             'runs': hist['runs'][-12:],
         },

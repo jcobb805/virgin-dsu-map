@@ -28,6 +28,10 @@ for buying minerals ahead of first production.
 4. Context: in-progress wellbores (DUC / DRILLING / COMPLETED) inside the unit,
    nearest producer distance (step-out gauge), sibling permits grouped per unit/pad.
 5. Weekly diff: permit IDs vs `history.json` → NEW badges, alert banner, toast.
+6. Ownership tier (`ownership.py`): FEE / MIXED / GOV per unit. Federal O&G mineral
+   % by area via BLM mineral estate GIS (WY; NM-office layer covering NM/TX/OK/KS; UT),
+   name markers (FED/STATE/SL/COM/tribal) everywhere else. GOV = N/A for buying;
+   dashboard defaults to Fee + Mixed.
 
 ## Maintenance
 - Manual run: `python fetch.py` (~15–30 min, mostly TX/NM well pulls).

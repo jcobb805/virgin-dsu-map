@@ -109,6 +109,13 @@
     border: 1px solid rgba(250,178,25,.5); font-size: 10px; font-weight: 700;
     letter-spacing: .8px; border-radius: 4px; padding: 1px 6px; vertical-align: middle;
   }
+  .chip {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .6px;
+    border-radius: 4px; padding: 1px 6px; vertical-align: middle; border: 1px solid;
+  }
+  .chip.fee { color: var(--good); border-color: rgba(12,163,12,.55); background: rgba(12,163,12,.10); }
+  .chip.mixed { color: var(--warn); border-color: rgba(250,178,25,.5); background: rgba(250,178,25,.08); }
+  .chip.gov { color: var(--muted); border-color: rgba(137,135,129,.5); background: rgba(137,135,129,.10); }
 
   .gridwrap { margin: 16px 22px 8px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
   table.grid { border-collapse: collapse; width: 100%; min-width: 1080px; font-size: 12.5px; }
@@ -149,6 +156,11 @@
 
 <div class="controls">
   <input type="text" id="fSearch" placeholder="Search operator, lease, county, formation&hellip;">
+  <select id="fTier">
+    <option value="feemixed">Fee + Mixed minerals</option>
+    <option value="fee">Fee only</option>
+    <option value="">All tiers (incl. Fed/State)</option>
+  </select>
   <select id="fState"><option value="">All states</option></select>
   <select id="fOp"><option value="">All operators</option></select>
   <label class="chk"><input type="checkbox" id="fNew"> New this week only</label>
@@ -206,8 +218,11 @@
   // ---------- KPI tiles ----------
   var opsAll = {};
   UNITS.forEach(function (u) { u.ops.forEach(function (o) { opsAll[o] = (opsAll[o] || 0) + 1; }); });
+  var feeCount = UNITS.filter(function (u) { return u.tier === 'FEE'; }).length;
+  var mixedCount = UNITS.filter(function (u) { return u.tier === 'MIXED'; }).length;
   var tiles = [
     { lab: 'Virgin units', val: fmt(M.virginUnits) },
+    { lab: 'Fee minerals', val: fmt(feeCount), note: fmt(mixedCount) + ' mixed fed/fee' },
     { lab: 'Permits', val: fmt(M.virginPermits) },
     { lab: 'New this week', val: fmt(M.newPermits), note: M.firstRun ? 'baseline run' : fmt(M.newUnits) + ' new units', cls: M.newPermits > 0 && !M.firstRun ? 'newt' : '' },
     { lab: 'States', val: fmt(new Set(UNITS.map(function (u) { return u.state; })).size) },
@@ -228,9 +243,11 @@
     var o = document.createElement('option'); o.value = op; o.textContent = op + ' (' + opsAll[op] + ')'; selOp.appendChild(o);
   });
 
-  var F = { q: '', state: '', op: '', newOnly: false };
+  var F = { q: '', state: '', op: '', newOnly: false, tier: 'feemixed' };
   function filtered() {
     return UNITS.filter(function (u) {
+      if (F.tier === 'fee' && u.tier !== 'FEE') return false;
+      if (F.tier === 'feemixed' && u.tier === 'GOV') return false;
       if (F.state && u.state !== F.state) return false;
       if (F.op && u.ops.indexOf(F.op) < 0) return false;
       if (F.newOnly && !u.hasNew) return false;
@@ -262,7 +279,8 @@
   legend.onAdd = function () {
     var d = L.DomUtil.create('div', 'legend');
     d.innerHTML = '<span class="sw" style="background:#fab219"></span>New this week<br>' +
-      '<span class="sw" style="background:#199e70"></span>Virgin unit (no production ever)';
+      '<span class="sw" style="background:#199e70"></span>Virgin unit (no production ever)<br>' +
+      '<span class="sw" style="background:#898781"></span>Fed/State minerals (N/A)';
     return d;
   };
   legend.addTo(map);
@@ -270,13 +288,22 @@
   var layerGroup = L.layerGroup().addTo(map);
   var unitLayers = {};
 
+  function tierChip(u) {
+    if (!u.tier) return '';
+    var cls = u.tier === 'FEE' ? 'fee' : u.tier === 'MIXED' ? 'mixed' : 'gov';
+    var lab = u.tier === 'GOV' ? 'FED/STATE' : u.tier;
+    if (u.tier !== 'FEE' && u.fedPct != null) lab += ' ' + u.fedPct + '%';
+    return '<span class="chip ' + cls + '">' + lab + '</span>';
+  }
+
   function popupHtml(u) {
-    var h = '<div class="pp"><h3>' + esc(u.name) + (u.hasNew ? ' <span class="badge">NEW</span>' : '') + '</h3>';
+    var h = '<div class="pp"><h3>' + esc(u.name) + ' ' + tierChip(u) + (u.hasNew ? ' <span class="badge">NEW</span>' : '') + '</h3>';
     h += '<div class="loc">' + esc(u.county) + ' Co., ' + esc(u.state) +
       (u.basin ? ' &middot; ' + esc(u.basin) : '') + (u.play ? ' &middot; ' + esc(u.play) : '') + '</div>';
     h += '<table>';
     if (u.str) h += '<tr><td>Location</td><td>' + esc(u.str) + '</td></tr>';
     h += '<tr><td>Operator</td><td>' + esc(u.ops.join(', ')) + '</td></tr>';
+    if (u.tier) h += '<tr><td>Minerals</td><td>' + esc(u.tierNote) + ' <span style="color:var(--muted)">(' + esc(u.tierBasis) + ')</span></td></tr>';
     if (u.interval) h += '<tr><td>Interval</td><td>' + esc(u.interval) + '</td></tr>';
     h += '<tr><td>Est. unit</td><td>~' + fmt(u.estAcres) + ' ac &middot; max lateral ' + fmt(u.maxLatFt) + ' ft</td></tr>';
     h += '<tr><td>Nearest producer</td><td>' + (u.nearestProd ?
@@ -305,7 +332,7 @@
     unitLayers = {};
     list.forEach(function (u) {
       var isNew = u.hasNew;
-      var color = isNew ? '#fab219' : '#199e70';
+      var color = u.tier === 'GOV' ? '#898781' : isNew ? '#fab219' : '#199e70';
       var poly = L.polygon(u.ring, {
         color: color, weight: isNew ? 2 : 1.2, fillColor: color,
         fillOpacity: isNew ? 0.30 : 0.18, opacity: 0.9
@@ -326,8 +353,10 @@
   }
 
   // ---------- grid ----------
+  var TIER_RANK = { FEE: 0, MIXED: 1, GOV: 2 };
   var COLS = [
     { k: 'hasNew', lab: '', w: 1, fn: function (u) { return u.hasNew ? '<span class="badge">NEW</span>' : ''; } },
+    { k: 'tier', lab: 'Minerals', fn: tierChip, sort: function (u) { return (TIER_RANK[u.tier] != null ? TIER_RANK[u.tier] : 3) * 1000 + (u.fedPct || 0); } },
     { k: 'latestApproved', lab: 'Approved', fn: function (u) { return u.latestApproved; } },
     { k: 'ops', lab: 'Operator', fn: function (u) { return esc(u.ops.join(', ')); }, sort: function (u) { return u.ops.join(','); } },
     { k: 'name', lab: 'Unit / Lease', fn: function (u) { return esc(u.name) + (u.permits.length > 1 ? ' <span class="sub">&times;' + u.permits.length + ' permits</span>' : ''); } },
@@ -389,6 +418,7 @@
   });
 
   document.getElementById('fSearch').addEventListener('input', function () { F.q = this.value.trim().toUpperCase(); render(); });
+  document.getElementById('fTier').addEventListener('change', function () { F.tier = this.value; render(); });
   selState.addEventListener('change', function () { F.state = this.value; render(); });
   selOp.addEventListener('change', function () { F.op = this.value; render(); });
   document.getElementById('fNew').addEventListener('change', function () { F.newOnly = this.checked; render(); });
@@ -398,14 +428,15 @@
 
   // ---------- CSV export ----------
   document.getElementById('btnCsv').addEventListener('click', function () {
-    var head = ['New', 'FirstSeen', 'LatestApproved', 'Operators', 'Unit', 'State', 'County', 'Basin', 'Play', 'Location',
+    var head = ['New', 'Minerals', 'FedOGPct', 'MineralsNote', 'FirstSeen', 'LatestApproved', 'Operators', 'Unit', 'State', 'County', 'Basin', 'Play', 'Location',
       'Permits', 'PermitAPIs', 'MaxLateralFt', 'EstAcres', 'NearestProducerMi', 'NearestProducer', 'InUnitActivity'];
     function cell(v) {
       v = String(v == null ? '' : v);
       return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
     var rows = current.map(function (u) {
-      return [u.hasNew ? 'NEW' : '', u.firstSeen, u.latestApproved, u.ops.join('; '), u.name, u.state, u.county,
+      return [u.hasNew ? 'NEW' : '', u.tier || '', u.fedPct != null ? u.fedPct : '', u.tierNote || '',
+        u.firstSeen, u.latestApproved, u.ops.join('; '), u.name, u.state, u.county,
         u.basin, u.play, u.str,
         u.permits.map(function (p) { return p.name; }).join('; '),
         u.permits.map(function (p) { return p.api; }).join('; '),
@@ -426,7 +457,8 @@
   var runs = (M.runs || []).slice().reverse();
   document.getElementById('footer').innerHTML =
     'Screen: permit lateral + half-mile buffer each side; a unit is "virgin" when no wellbore inside it has ever recorded production (Enverus FirstProdDate / production history). ' +
-    'Unit outlines are corridor approximations, not surveyed unit boundaries. Data: Enverus Developer API v3.' +
+    'Unit outlines are corridor approximations, not surveyed unit boundaries. Minerals tier: FEE = private minerals (actionable), MIXED = partial federal/state with fee tracts, FED/STATE = government minerals (N/A). ' +
+    'Fed % = share of unit area where the U.S. owns the oil &amp; gas per BLM mineral estate GIS (WY, NM/TX/OK/KS, UT); elsewhere classified from well-name markers (FED, STATE, COM). State trust minerals are name-detected only. Data: Enverus Developer API v3 + BLM.' +
     (runs.length ? '<table><tr><th>Run</th><th class="num">Units</th><th class="num">Permits</th><th class="num">New permits</th><th class="num">New units</th></tr>' +
       runs.map(function (r) {
         return '<tr><td>' + r.date + '</td><td class="num">' + fmt(r.virginUnits) + '</td><td class="num">' + fmt(r.virginPermits) +
