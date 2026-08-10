@@ -539,6 +539,9 @@ def main():
         max_lat_ft = max(
             (c['permit'].get('PermittedLateralLength_FT') or
              c['corridor'].line_len_m / 0.3048) for c in members)
+        # lateral is "assumed" when no permit reports a length and no real geometry exists
+        lat_reported = (any(c['permit'].get('PermittedLateralLength_FT') for c in members)
+                        or any(not c['corridor'].approx for c in members))
         sections = max(1, round(max_lat_ft / 5280))
         nearest = min((c.get('nearest') for c in members if c.get('nearest')),
                       key=lambda n: n['distMi'], default=None)
@@ -591,6 +594,7 @@ def main():
             'centroid': [round(clat, 5), round(clon, 5)],
             'estAcres': sections * 640,
             'maxLatFt': round(max_lat_ft),
+            'latAssumed': not lat_reported,
             'approxGeom': merged.approx,
             'nearestProd': nearest,
             'activity': sorted(acts.values(), key=lambda a: a['name']),

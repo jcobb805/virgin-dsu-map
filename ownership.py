@@ -146,6 +146,73 @@ def fed_overlay_pct(unit):
     return round(100.0 * hits / len(pts))
 
 
+# ---------------------------------------------------------------- scoring
+# Composite high-grade score, 0-100. Lateral length is the heaviest factor:
+# 10,000-15,000+ ft (2-3 mi) laterals score far above short ones. Step-out
+# distance to proven production second; in-unit DUC/drilling a bonus. The
+# whole thing is scaled by the minerals factor (fee=1.0, mixed=private share,
+# gov=0) so a great fed unit still scores 0.
+W_LATERAL, W_PROXIMITY, B_DUC, B_DRILLING = 0.58, 0.32, 0.10, 0.05
+
+
+def lateral_score(lat_ft, assumed):
+    if assumed:
+        return 0.5           # length not reported - neutral, don't reward a guess
+    if lat_ft >= 10000:
+        return 1.0
+    if lat_ft <= 4000:
+        return 0.15
+    return 0.15 + 0.85 * (lat_ft - 4000) / 6000.0
+
+
+def proximity_score(dist_mi):
+    if dist_mi is None:
+        return 0.15          # >15 mi wildcat
+    if dist_mi <= 1.0:
+        return 1.0
+    if dist_mi >= 10.0:
+        return 0.25
+    return 1.0 - 0.75 * (dist_mi - 1.0) / 9.0
+
+
+def activity_bonus(activity):
+    statuses = ' '.join((a.get('status') or '') for a in (activity or [])).upper()
+    if 'DUC' in statuses or 'COMPLETED' in statuses:
+        return B_DUC
+    if 'DRILLING' in statuses:
+        return B_DRILLING
+    return 0.0
+
+
+def minerals_factor(tier, fed_pct):
+    if tier == 'FEE':
+        return 1.0
+    if tier == 'MIXED':
+        if fed_pct is None:
+            return 0.5
+        return max(0.15, min(0.85, (100 - fed_pct) / 100.0))
+    return 0.0
+
+
+def score_unit(u):
+    assumed = u.get('latAssumed')
+    if assumed is None:      # data.js from before the flag existed
+        assumed = bool(u.get('approxGeom')) and u.get('maxLatFt') == 10000
+    ls = lateral_score(u.get('maxLatFt') or 0, assumed)
+    dist = (u.get('nearestProd') or {}).get('distMi')
+    ps = proximity_score(dist)
+    ab = activity_bonus(u.get('activity'))
+    mf = minerals_factor(u.get('tier'), u.get('fedPct'))
+    u['score'] = round(100 * mf * min(1.0, W_LATERAL * ls + W_PROXIMITY * ps + ab))
+    parts = [f"lateral {u.get('maxLatFt'):,} ft ({'assumed' if assumed else format(ls, '.2f')})",
+             f"step-out {dist if dist is not None else '>15'} mi ({ps:.2f})"]
+    if ab:
+        parts.append(f"activity bonus +{ab:.2f}")
+    parts.append(f"minerals x{mf:.2f}")
+    u['scoreNote'] = ' | '.join(parts)
+    return u['score']
+
+
 # ---------------------------------------------------------------- tiers
 def assign_tier(unit, fed_pct, flags):
     """Returns (tier, basis, note)."""
@@ -196,6 +263,7 @@ def enrich_units(units, log=print):
         u['fedPct'] = fed_pct
         u['tierBasis'] = basis
         u['tierNote'] = note
+        score_unit(u)
     counts = {}
     for u in units:
         counts[u['tier']] = counts.get(u['tier'], 0) + 1
@@ -216,8 +284,9 @@ if __name__ == '__main__':
         json.dump(d, f, separators=(',', ':'))
         f.write(';\n')
     print('data.js re-enriched.')
-    for u in sorted(d['units'], key=lambda x: (x['tier'], (x['nearestProd'] or {}).get('distMi', 99))):
+    for u in sorted(d['units'], key=lambda x: -(x.get('score') or 0)):
         np_ = u['nearestProd']
-        print(f"{u['tier']:5} {'fed=' + str(u['fedPct']) + '%' if u['fedPct'] is not None else 'name-based':>10}  "
-              f"{u['state']} {u['county'][:14]:14} {', '.join(u['ops'])[:30]:30} {u['name'][:22]:22} "
-              f"near={(str(np_['distMi']) + 'mi') if np_ else '>15mi':>7}  {u['tierNote']}")
+        print(f"score={u['score']:>3} {u['tier']:5} {u['state']} {u['county'][:14]:14} "
+              f"{', '.join(u['ops'])[:28]:28} {u['name'][:22]:22} "
+              f"lat={u['maxLatFt']:>6} near={(str(np_['distMi']) + 'mi') if np_ else '>15mi':>7}  "
+              f"[{u['scoreNote']}]")

@@ -304,6 +304,7 @@
     if (u.str) h += '<tr><td>Location</td><td>' + esc(u.str) + '</td></tr>';
     h += '<tr><td>Operator</td><td>' + esc(u.ops.join(', ')) + '</td></tr>';
     if (u.tier) h += '<tr><td>Minerals</td><td>' + esc(u.tierNote) + ' <span style="color:var(--muted)">(' + esc(u.tierBasis) + ')</span></td></tr>';
+    if (u.score != null) h += '<tr><td>Score</td><td><b>' + u.score + '</b> / 100 <span style="color:var(--muted)">' + esc(u.scoreNote || '') + '</span></td></tr>';
     if (u.interval) h += '<tr><td>Interval</td><td>' + esc(u.interval) + '</td></tr>';
     h += '<tr><td>Est. unit</td><td>~' + fmt(u.estAcres) + ' ac &middot; max lateral ' + fmt(u.maxLatFt) + ' ft</td></tr>';
     h += '<tr><td>Nearest producer</td><td>' + (u.nearestProd ?
@@ -356,6 +357,7 @@
   var TIER_RANK = { FEE: 0, MIXED: 1, GOV: 2 };
   var COLS = [
     { k: 'hasNew', lab: '', w: 1, fn: function (u) { return u.hasNew ? '<span class="badge">NEW</span>' : ''; } },
+    { k: 'score', lab: 'Score', num: true, fn: function (u) { return u.score != null ? '<b>' + u.score + '</b>' : ''; }, sort: function (u) { return u.score || 0; } },
     { k: 'tier', lab: 'Minerals', fn: tierChip, sort: function (u) { return (TIER_RANK[u.tier] != null ? TIER_RANK[u.tier] : 3) * 1000 + (u.fedPct || 0); } },
     { k: 'latestApproved', lab: 'Approved', fn: function (u) { return u.latestApproved; } },
     { k: 'ops', lab: 'Operator', fn: function (u) { return esc(u.ops.join(', ')); }, sort: function (u) { return u.ops.join(','); } },
@@ -370,7 +372,7 @@
     { k: 'str', lab: 'Location', fn: function (u) { return esc(u.str); } },
     { k: 'firstSeen', lab: 'First seen', fn: function (u) { return u.firstSeen; } }
   ];
-  var sortK = 'latestApproved', sortDir = -1;
+  var sortK = 'score', sortDir = -1;
   var gHead = document.getElementById('gHead'), gBody = document.getElementById('gBody');
   gHead.innerHTML = COLS.map(function (c, i) {
     return '<th data-i="' + i + '" class="' + (c.num ? 'num' : '') + '">' + c.lab + '<span class="arr"></span></th>';
@@ -428,14 +430,14 @@
 
   // ---------- CSV export ----------
   document.getElementById('btnCsv').addEventListener('click', function () {
-    var head = ['New', 'Minerals', 'FedOGPct', 'MineralsNote', 'FirstSeen', 'LatestApproved', 'Operators', 'Unit', 'State', 'County', 'Basin', 'Play', 'Location',
+    var head = ['New', 'Score', 'Minerals', 'FedOGPct', 'MineralsNote', 'FirstSeen', 'LatestApproved', 'Operators', 'Unit', 'State', 'County', 'Basin', 'Play', 'Location',
       'Permits', 'PermitAPIs', 'MaxLateralFt', 'EstAcres', 'NearestProducerMi', 'NearestProducer', 'InUnitActivity'];
     function cell(v) {
       v = String(v == null ? '' : v);
       return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
     var rows = current.map(function (u) {
-      return [u.hasNew ? 'NEW' : '', u.tier || '', u.fedPct != null ? u.fedPct : '', u.tierNote || '',
+      return [u.hasNew ? 'NEW' : '', u.score != null ? u.score : '', u.tier || '', u.fedPct != null ? u.fedPct : '', u.tierNote || '',
         u.firstSeen, u.latestApproved, u.ops.join('; '), u.name, u.state, u.county,
         u.basin, u.play, u.str,
         u.permits.map(function (p) { return p.name; }).join('; '),
@@ -458,6 +460,7 @@
   document.getElementById('footer').innerHTML =
     'Screen: permit lateral + half-mile buffer each side; a unit is "virgin" when no wellbore inside it has ever recorded production (Enverus FirstProdDate / production history). ' +
     'Unit outlines are corridor approximations, not surveyed unit boundaries. Minerals tier: FEE = private minerals (actionable), MIXED = partial federal/state with fee tracts, FED/STATE = government minerals (N/A). ' +
+    'Score (0-100): lateral length 58% (10,000+ ft = full credit, ramp down to 4,000 ft), step-out distance 32% (full credit within 1 mi of production), +10 DUC/completed well in unit (+5 drilling), all scaled by the private-minerals share; unreported laterals score neutral. ' +
     'Fed % = share of unit area where the U.S. owns the oil &amp; gas per BLM mineral estate GIS (WY, NM/TX/OK/KS, UT); elsewhere classified from well-name markers (FED, STATE, COM). State trust minerals are name-detected only. Data: Enverus Developer API v3 + BLM.' +
     (runs.length ? '<table><tr><th>Run</th><th class="num">Units</th><th class="num">Permits</th><th class="num">New permits</th><th class="num">New units</th></tr>' +
       runs.map(function (r) {
