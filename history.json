@@ -79,6 +79,15 @@
    "virginUnits": 39,
    "newPermits": 69,
    "newUnits": 39
+  },
+  {
+   "date": "2026-08-10",
+   "cutoff": "2026-05-12",
+   "candidates": 3491,
+   "virginPermits": 69,
+   "virginUnits": 39,
+   "newPermits": 0,
+   "newUnits": 0
   }
  ]
 }
