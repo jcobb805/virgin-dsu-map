@@ -262,9 +262,14 @@
 
   // ---------- map ----------
   var map = L.map('map', { zoomSnap: 0.5 });
-  var dark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
-  }).addTo(map);
+  // Esri World Dark Gray Canvas (base + labels) -- free, no API key (CARTO basemaps now require a key)
+  var darkBase = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri, HERE, Garmin, OpenStreetMap contributors', maxNativeZoom: 16, maxZoom: 19
+  });
+  var darkRef = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxNativeZoom: 16, maxZoom: 19
+  });
+  var dark = L.layerGroup([darkBase, darkRef]).addTo(map);
   var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: '&copy; Esri', maxZoom: 19
   });
